@@ -1,0 +1,132 @@
+---
+title: "Data607-Assignment2"
+author: "Devin Teran"
+date: "2/27/2020"
+output: html_document
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+```
+
+### Overview
+The purpose of the project is the following:  
+1. Read in flight data  
+2. Tidy the data  
+3. Compare flight delays across the airlines: AM WEST and ALASKA    
+
+As stated by Hadley Wickham on [https://r4ds.had.co.nz/tidy-data.html](https://r4ds.had.co.nz/tidy-data.html), we're going to make this data tidy by enforcing the following rules:
+
+>There are three interrelated rules which make a dataset tidy:  
+>  
+>Each variable must have its own column.  
+>Each observation must have its own row.  
+>Each value must have its own cell.  
+
+### Necessary libraries:
+* tidyverse
+* dplyr
+* ggplot2
+* kableExtra
+
+### Retrieve Data
+We're retrieivng the data in the form of a csv from GitHub.  The data is in an untidy format with several empty lines, columns missing names, rows with multiple observations, etc.
+```{r get_csv}
+flights <- read_csv("https://raw.githubusercontent.com/devinteran/Data607-Assignment2/master/Flights.csv")
+kable(flights) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+  
+### Cleaning Data
+First I will remove empty rows of NA and add airline names where they are implied.
+```{r clean_data}
+#Remove empty row 2 and 5
+flights <- flights[-c(1,4),]
+
+#Add data values which are currently missing but are implied
+flights[2,1] <- "ALASKA"
+flights[4,1] <- "AM WEST"
+
+#Rename columns
+colnames(flights) <- c("Airline","Status","Los Angeles","Phoenix","San Diego","San Francisco","Seattle")
+```
+  
+### Reshape the Data 
+#### Wide to Long
+Right now the data is very wide.  We're going to perform operations to make each city into an individual row.
+```{r wide-flight_data,echo=FALSE}
+kable(flights) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+```{r pivot_long}
+flights <- flights %>% pivot_longer(c("Los Angeles","Phoenix","San Diego","San Francisco","Seattle"),names_to = "City",values_to="Count")
+```
+  
+### Reducing Length
+As you can see below, each city has two rows per airline.  One for the on time status and another for the delayed status.  It will be easier if on time and delayed counts had their own column.  
+```{r long-flight_data-add-column,echo=FALSE}
+kable(head(arrange(flights,Airline,City))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+  
+To do this will be adding two columns using the pivot_wider() function.
+```{r pivot_wide}
+flights <- flights %>% pivot_wider(names_from="Status",values_from="Count")
+```
+  
+  
+### Final Clean Data View
+Here is our data in a clean format.  Now we're ready for analysis!
+```{r total-flights-table}
+flights_per_city_per_airline <- flights %>% mutate(`Total Flights` = `on time` + delayed)
+
+kable(flights_per_city_per_airline) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+  
+### Let's look at total flights per airline per route
+The most popular route for AM West is Phoenix and the most popular route for ALASKA is Seattle.  In general, AM WEST looks to have more flights in most cities compared to ALASKA.
+```{r total-flights-plot}
+ggplot(flights_per_city_per_airline,aes(fill=Airline,x=reorder(City,`Total Flights`),y=`Total Flights`)) +
+  geom_bar(position="dodge", stat="identity") +
+  coord_flip()
+```
+  
+### What percent of flights per airline per route are delayed?
+Intersting findings include:  
+* AM WEST has a lot of routes and it also has more delays compared to ALASKA.   
+* San Francisco has the most delays for both airlines.  
+* Phoenix has the most routes for AM WEST but the lowest % delays
+```{r plot-arrivals}
+flights_perct <- flights_per_city_per_airline %>% 
+    mutate(`Percent Flights Delayed` = delayed/`Total Flights`,
+           `Percent Flights On Time` = `on time` / `Total Flights`)
+
+ggplot(flights_perct,aes(fill=Airline,x=reorder(City,-`Percent Flights Delayed`),y=`Percent Flights Delayed`)) + 
+  geom_bar(position="dodge", stat="identity") +
+  coord_flip()
+```
+
+### Do flight routes with more flights have more or fewer delays?
+* The most popular route for AM West, Phoenix, has the lowest percent delays
+* AM West has more delays than ALASKA when comparing city to city routes
+```{r percent-total-delayed}
+
+ggplot(flights_perct,aes(fill=City,x=`Total Flights`,label=City,y=`Percent Flights Delayed`,shape=City,color=Airline,size=4)) + 
+  geom_point() +
+  guides(size=FALSE)
+
+```
+
+  
+## Conclusion
+It is clear that although the airline, AM WEST, has more flights, they are delayed more often than the airline ALASKA.  The most common route for AM WEST to Phoenix has the lowest % delays.  With more data from more airlines it would be interesting to see if the correlation of increased number of flights and fewer delays holds.  I would recommend flying ALASKA if possible to avoid delays.  It would be interesting to be able to bring cost into this analysis. 
+  
+  
